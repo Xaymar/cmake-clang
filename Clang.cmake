@@ -1,3 +1,5 @@
+set(CLANG_PATH "" CACHE PATH "Path to Clang Toolset (if not in environment)")
+
 function(clang_format)
 	cmake_parse_arguments(
 		PARSE_ARGV 0
@@ -7,7 +9,21 @@ function(clang_format)
 		"TARGETS"
 	)
 
-	find_program(CLANG_FORMAT_BIN "clang-format" DOC "Path (or name) of the clang-format binary")
+	find_program(CLANG_FORMAT_BIN
+		"clang-format"
+		DOC "Path (or name) of the clang-format binary"
+		HINTS
+			${CLANG_PATH}
+		PATHS
+			/bin
+			/sbin
+			/usr/bin
+			/usr/local/bin
+		PATH_SUFFIXES
+			bin
+			bin64
+			bin32
+	)
 	if(NOT CLANG_FORMAT_BIN)
 		message(WARNING "Clang: Could not find clang-format at path '${CLANG_FORMAT_BIN}'. Disabling clang-format...")
 		return()
