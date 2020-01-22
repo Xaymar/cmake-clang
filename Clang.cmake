@@ -5,7 +5,7 @@ function(clang_format)
 		PARSE_ARGV 0
 		_CLANG_FORMAT
 		"DEPENDENCY;GLOBAL"
-		"REGEX"
+		"REGEX;VERSION"
 		"TARGETS"
 	)
 
@@ -25,14 +25,38 @@ function(clang_format)
 			bin32
 	)
 	if(NOT CLANG_FORMAT_BIN)
-		message(WARNING "Clang: Could not find clang-format at path '${CLANG_FORMAT_BIN}'. Disabling clang-format...")
+		message(WARNING "Clang: Could not find clang-format at path '${CLANG_FORMAT_BIN}', disabling clang-format...")
 		return()
 	endif()
 
+	# Validate Version
+	if (_CLANG_FORMAT_VERSION)
+		set(_VERSION_RESULT "")
+		set(_VERSION_OUTPUT "")
+		execute_process(
+			COMMAND "${CLANG_FORMAT_BIN}" --version
+			WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+			RESULT_VARIABLE _VERSION_RESULT
+			OUTPUT_VARIABLE _VERSION_OUTPUT
+			OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_STRIP_TRAILING_WHITESPACE ERROR_QUIET
+		)
+		if(NOT _VERSION_RESULT EQUAL 0)
+			message(WARNING "Clang: Could not discover version, disabling clang-format...")
+			return()
+		endif()
+		string(REGEX MATCH "([0-9]+\.[0-9]+\.[0-9]+)" _VERSION_MATCH ${_VERSION_OUTPUT})
+		if(NOT ${_VERSION_MATCH} VERSION_GREATER_EQUAL ${_CLANG_FORMAT_VERSION})
+			message(WARNING "Clang: Old version discovered, disabling clang-format...")
+			return()
+		endif()
+	endif()
+
+	# Default Filter
 	if(NOT _CLANG_FORMAT_FILTER)
 		set(_CLANG_FORMAT_FILTER "\.(h|hpp|c|cpp)$")
 	endif()
 
+	# Go through each target
 	foreach(_target ${_CLANG_FORMAT_TARGETS})
 #		get_target_property(target_name ${_target} NAME)
 
