@@ -9,13 +9,13 @@ Adds clang-tidy and clang-format support for all current CMake generators, such 
 * Clang
 
 # Usage Reference
-## generate_compile_commands_json([REGEX <filter>] TARGETS <target>[;<target>[;...]])
+### generate_compile_commands_json([REGEX <filter>] TARGETS <target>[;<target>[;...]])
 Generates a compile_commands.json for each supported build configuration which is used for various Clang tools. These files use generator expressions if possible, and should contain everything necessary to run other tools.
 
 * `REGEX <filter>`: Specify a regular expression by which to filter all sources of the given targets. Defaults to `\.(h|hpp|c|cpp)$`.
 * `TARGETS <target>[;<target>[;...]]`: Declare for which targets the compile commands database should be created.
 
-## clang_format([DEPENDENCY] [GLOBAL] [REGEX <filter>] [VERSION <version] TARGETS <target>[<target>[;...]])
+### clang_format([DEPENDENCY] [GLOBAL] [REGEX <filter>] [VERSION <version] TARGETS <target>[<target>[;...]])
 Add a `TARGETNAME_CLANG-FORMAT` target to the project which runs clang-format on the project, using whichever `.clang-format` file it finds next to the source. Automatically applies all formatting and can be used as a build step using the DEPENDENCY flag, in order to prevent formatting from not being applied. 
 
 * `DEPENDENCY`: Add the `TARGETNAME_CLANG-FORMAT` as a build dependency to the target.
@@ -24,7 +24,7 @@ Add a `TARGETNAME_CLANG-FORMAT` target to the project which runs clang-format on
 * `VERSION <version>`: Require a minimum Clang Toolset version to run clang-format.
 * `TARGETS <target>[;<target>[;...]]`: Specify on which targets clang-format is supposed to be run.
 
-## clang_tidy([DEPENDENCY] [GLOBAL] [REGEX <filter>] [VERSION <version] TARGETS <target>[<target>[;...]])
+### clang_tidy([DEPENDENCY] [GLOBAL] [REGEX <filter>] [VERSION <version] TARGETS <target>[<target>[;...]])
 Add a `TARGETNAME_CLANG-TIDY` target to the project which runs clang-tidy on the project, using whichever `.clang-tidy` file it finds next to the source. Does not apply suggested fixes automatically, and requires the creation of compile command databases for each target.
 
 * `DEPENDENCY`: Add the `TARGETNAME_CLANG-TIDY` as a build dependency to the target.
