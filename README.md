@@ -32,3 +32,26 @@ Add a `TARGETNAME_CLANG-TIDY` target to the project which runs clang-tidy on the
 * `REGEX <filter>`: Specify a regular expression by which to filter all sources of the given targets. Defaults to `\.(h|hpp|c|cpp)$`.
 * `VERSION <version>`: Require a minimum Clang Toolset version to run clang-tidy.
 * `TARGETS <target>[;<target>[;...]]`: Specify on which targets clang-tidy is supposed to be run.
+
+# Example Usage
+## Adding clang-format as a dependency and clang-tidy as a normal target
+```
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Clang/Clang.cmake")
+	include("Clang")
+  option(ENABLE_CLANG ON)
+  if(ENABLE_CLANG)
+    generate_compile_commands_json(
+      TARGETS ${PROJECT_NAME}
+    )
+    clang_tidy(
+      TARGETS ${PROJECT_NAME}		
+      VERSION 9.0.0
+    )
+    clang_format(
+      TARGETS ${PROJECT_NAME}
+      DEPENDENCY
+      VERSION 9.0.0
+    )
+  endif()
+endif()
+```
