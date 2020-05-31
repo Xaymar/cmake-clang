@@ -102,6 +102,10 @@ function(generate_compile_commands_json)
 		set(COMPILER_TAG "CLANG") # Compatible with GNU
 		set(COMPILER_INCLUDE_PREFIX "-I")
 		set(COMPILER_DEFINE_PREFIX "-D")
+	elseif((CMAKE_C_COMPILER_ID STREQUAL "AppleClang") AND (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))
+		set(COMPILER_TAG "CLANG") # Compatible with Clang
+		set(COMPILER_INCLUDE_PREFIX "-I")
+		set(COMPILER_DEFINE_PREFIX "-D")
 	else()
 		message("Clang for CMake: C ID '${CMAKE_C_COMPILER_ID}'")
 		message("Clang for CMake: C Version '${CMAKE_C_COMPILER_VERSION}'")
