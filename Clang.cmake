@@ -246,8 +246,21 @@ function(clang_format)
 	)
 
 	find_program(CLANG_FORMAT_BIN
-		"clang-format"
-		DOC "Path (or name) of the clang-format binary"
+		NAMES
+			"clang-format"
+			"clang-format-10"
+			"clang-format-9"
+			"clang-format-8"
+			"clang-format-7"
+			"clang-format-6"
+			"clang-format-6.0"
+			"clang-format-5.0"
+			"clang-format-4.0"
+			"clang-format-3.9"
+			"clang-format-3.8"
+			"clang-format-3.7"
+			"clang-format-3.6"
+			"clang-format-3.5"
 		HINTS
 			"${CLANG_PATH}"
 		PATHS
@@ -259,6 +272,7 @@ function(clang_format)
 			bin
 			bin64
 			bin32
+		DOC "Path (or name) of the clang-format binary"
 	)
 	if(NOT CLANG_FORMAT_BIN)
 		message(WARNING "Clang for CMake: Could not find clang-format at path '${CLANG_FORMAT_BIN}', disabling clang-format...")
@@ -344,8 +358,20 @@ function(clang_tidy)
 	)
 
 	find_program(CLANG_TIDY_BIN
-		"clang-tidy"
-		DOC "Path (or name) of the clang-tidy binary"
+		NAMES
+			"clang-tidy"
+			"clang-tidy-10"
+			"clang-tidy-9"
+			"clang-tidy-8"
+			"clang-tidy-7"
+			"clang-tidy-6"
+			"clang-tidy-6.0"
+			"clang-tidy-5.0"
+			"clang-tidy-4.0"
+			"clang-tidy-3.9"
+			"clang-tidy-3.8"
+			"clang-tidy-3.7"
+			"clang-tidy-3.6"
 		HINTS
 			"${CLANG_PATH}"
 		PATHS
@@ -357,6 +383,7 @@ function(clang_tidy)
 			bin
 			bin64
 			bin32
+		DOC "Path (or name) of the clang-tidy binary"
 	)
 	if(NOT CLANG_TIDY_BIN)
 		message(WARNING "Clang for CMake: Could not find clang-tidy at path '${CLANG_TIDY_BIN}', disabling clang-tidy...")
