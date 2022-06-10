@@ -244,7 +244,12 @@ function(generate_compile_commands_json)
 		endforeach()
 		string(APPEND COMPILE_COMMAND_JSON "]")
 
-		file(GENERATE TARGET ${_target} OUTPUT "$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>/compile_commands.json" CONTENT "${COMPILE_COMMAND_JSON}")
+		file(GENERATE
+			OUTPUT "$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>/compile_commands.json" 
+			CONTENT "${COMPILE_COMMAND_JSON}"
+			TARGET ${_target} 
+			FILE_PERMISSIONS 755
+		)
 	endforeach()
 endfunction()
 
