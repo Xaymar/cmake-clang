@@ -1,3 +1,5 @@
+cmake_minimum_required(3.19)
+
 set(CLANG_PATH "" CACHE PATH "Path to Clang Toolset (if not in environment)")
 
 function(string_escape)
@@ -242,7 +244,7 @@ function(generate_compile_commands_json)
 		endforeach()
 		string(APPEND COMPILE_COMMAND_JSON "]")
 
-		file(GENERATE OUTPUT "$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>/compile_commands.json" CONTENT "${COMPILE_COMMAND_JSON}")
+		file(GENERATE TARGET ${_target} OUTPUT "$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>/compile_commands.json" CONTENT "${COMPILE_COMMAND_JSON}")
 	endforeach()
 endfunction()
 
