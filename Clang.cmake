@@ -1,8 +1,8 @@
-cmake_minimum_required(3.19)
+cmake_minimum_required(VERSION 3.20)
 
 set(CLANG_PATH "" CACHE PATH "Path to Clang Toolset (if not in environment)")
 
-function(string_escape)
+function(json_escape_string)
 	cmake_parse_arguments(
 		PARSE_ARGV 0
 		_ARGS
@@ -11,75 +11,115 @@ function(string_escape)
 		""
 	)
 
-	set(_el "${_ARGS_INPUT}")
-	string(REPLACE "\\" "\\\\" _el "${_el}")
-	string(REPLACE "\"" "\\\"" _el "${_el}")
-	set(${_ARGS_OUTPUT} "${_el}" PARENT_SCOPE)
+	set(_tmp "${_ARGS_INPUT}")
+	string(REPLACE "\\" "\\\\" _tmp "${_tmp}")
+	string(REPLACE "\"" "\\\"" _tmp "${_tmp}")
+	set(${_ARGS_OUTPUT} "${_tmp}" PARENT_SCOPE)
 endfunction()
 
-function(string_append_escaped)
+function(get_target_include_directories)
+	unset(_ARGS)
 	cmake_parse_arguments(
 		PARSE_ARGV 0
 		_ARGS
-		""
-		"OUTPUT;INPUT"
-		""
+		"INTERFACE"
+		"TARGET;OUTPUT"
+		"IGNORE"
 	)
 
-	set(_el "${_ARGS_INPUT}")
-	if(_el)
-		string_escape(OUTPUT _el INPUT "${_el}")
-		set(${_ARGS_OUTPUT} "${${_ARGS_OUTPUT}}${_el}" PARENT_SCOPE)
+	# FIXME: For some reason, CMake claims that the target we depend on depends on the target we are.
+	# Might be something broken with LINK_LIBRARIES or similar?
+
+	set(out "")
+	set(ignore "${_ARGS_IGNORE}")
+	list(APPEND ignore "${_ARGS_TARGET}")
+
+	set(gtid "")
+	if(_ARGS_INTERFACE)
+		get_property(gtid TARGET ${current_target} PROPERTY INTERFACE_LINK_LIBRARIES)
+	else()
+		get_property(gtid TARGET ${current_target} PROPERTY LINK_LIBRARIES)
 	endif()
-endfunction()
-
-function(string_append_target_includes)
-	cmake_parse_arguments(
-		PARSE_ARGV 0
-		_ARGS
-		"LINKED"
-		"OUTPUT;PREFIX;TARGET"
-		""
-	)
-
-	set(_out "")
-	if(TARGET ${_ARGS_TARGET})
-		get_target_property(target_type ${_ARGS_TARGET} TYPE)
-		if(
-			(${target_type} STREQUAL "MODULE_LIBRARY") OR
-			(${target_type} STREQUAL "STATIC_LIBRARY") OR
-			(${target_type} STREQUAL "SHARED_LIBRARY") OR
-			(${target_type} STREQUAL "EXECUTABLE")
-		)
-			# Include Directories
-			set(prop "$<TARGET_PROPERTY:${_ARGS_TARGET},INCLUDE_DIRECTORIES>")
-			set(test "$<$<BOOL:${prop}>:${_ARGS_PREFIX}$<JOIN:${prop}, ${_ARGS_PREFIX}>>")
-			set(prop2 "$<TARGET_PROPERTY:${_ARGS_TARGET},INTERFACE_INCLUDE_DIRECTORIES>")
-			set(test2 "$<$<BOOL:${prop2}>:${_ARGS_PREFIX}$<JOIN:${prop2}, ${_ARGS_PREFIX}>>")
-			set(prop3 "$<TARGET_PROPERTY:${_ARGS_TARGET},INTERFACE_SYSTEM_INCLUDE_DIRECTORIES>")
-			set(test3 "$<$<BOOL:${prop3}>:${_ARGS_PREFIX}$<JOIN:${prop3}, ${_ARGS_PREFIX}>>")
-			set(_out "${_out}${test} ${test2} ${test3}")
-
-			# Try and scan any linked libraries for include directories.
-			if(NOT _ARGS_LINKED)
-				get_target_property(_els ${_target} LINK_LIBRARIES)
-				foreach(_lib ${_els})
-					set(_out2 "")
-					string_append_target_includes(TARGET "${_lib}" PREFIX "${_ARGS_PREFIX}" OUTPUT _out2 LINKED)
-					set(_out "${_out}${_out2}")
-				endforeach()
-			endif()
-		elseif((${target_type} STREQUAL "INTERFACE_LIBRARY"))
-			# Public Include Directories
-			set(prop "$<TARGET_PROPERTY:${_ARGS_TARGET},INTERFACE_INCLUDE_DIRECTORIES>")
-			set(test "$<$<BOOL:${prop}>:${_ARGS_PREFIX}$<JOIN:${prop}, ${_ARGS_PREFIX}>>")
-			set(_out "${_out}${test} ")
-		else()
-			message("Clang for CMake: Unsupported Target type '${target_type}', please open an issue for this.")
+	foreach(_tmp ${gtid})
+		list(APPEND ignore "${_tmp}")
+		if((NOT "${_tmp}" IN_LIST _ARGS_IGNORE) AND (NOT "${_tmp}" STREQUAL "${_ARGS_TARGET}") AND (TARGET "${_tmp}"))
+			get_target_include_directories(INTERFACE OUTPUT _tmp2 TARGET "${_tmp}" IGNORE ${ignore})
+			foreach(_tmp3 ${_tmp2})
+				list(APPEND out "${_tmp3}")
+			endforeach()
 		endif()
+	endforeach()
+
+	set(gtid_source_dir "")
+	get_property(gtid_source_dir TARGET ${_ARGS_TARGET} PROPERTY SOURCE_DIR)
+
+	set(gtid "")
+	if(_ARGS_INTERFACE)
+		get_property(gtid TARGET ${_ARGS_TARGET} PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+	else()
+		get_property(gtid TARGET ${_ARGS_TARGET} PROPERTY INCLUDE_DIRECTORIES)
+	endif()
+	foreach(_tmp ${gtid})
+		cmake_path(ABSOLUTE_PATH _tmp BASE_DIRECTORY "${gtid_source_dir}")
+		list(APPEND out "${_tmp}")
+	endforeach()
+
+	if(_ARGS_INTERFACE)
+		set(gtid "")
+		get_property(gtid TARGET ${_ARGS_TARGET} PROPERTY INTERFACE_SYSTEM_INCLUDE_DIRECTORIES)
+		foreach(_tmp ${gtid})
+			cmake_path(ABSOLUTE_PATH _tmp BASE_DIRECTORY "${gtid_source_dir}")
+			list(APPEND out "${_tmp}")
+		endforeach()
 	endif()
 
-	set(${_ARGS_OUTPUT} "${${_ARGS_OUTPUT}}${_out}" PARENT_SCOPE)
+	set(${_ARGS_OUTPUT} "${out}" PARENT_SCOPE)
+endfunction()
+
+function(get_target_definitions)
+	unset(_ARGS)
+	cmake_parse_arguments(
+		PARSE_ARGV 0
+		_ARGS
+		"INTERFACE"
+		"TARGET;OUTPUT"
+		"IGNORE"
+	)
+
+	# FIXME: For some reason, CMake claims that the target we depend on depends on the target we are.
+	# Might be something broken with LINK_LIBRARIES or similar?
+
+	set(out "")
+	set(ignore "${_ARGS_IGNORE}")
+	list(APPEND ignore "${_ARGS_TARGET}")
+
+	set(gtd "")
+	if(_ARGS_INTERFACE)
+		get_property(gtd TARGET ${current_target} PROPERTY INTERFACE_LINK_LIBRARIES)
+	else()
+		get_property(gtd TARGET ${current_target} PROPERTY LINK_LIBRARIES)
+	endif()
+	foreach(_tmp ${gtd})
+		list(APPEND ignore "${_tmp}")
+		if((NOT "${_tmp}" IN_LIST _ARGS_IGNORE) AND (NOT "${_tmp}" STREQUAL "${_ARGS_TARGET}") AND (TARGET "${_tmp}"))
+			get_target_definitions(INTERFACE OUTPUT _tmp2 TARGET "${_tmp}" IGNORE ${ignore})
+			foreach(_tmp3 ${_tmp2})
+				list(APPEND out "${_tmp3}")
+			endforeach()
+		endif()
+	endforeach()
+
+	set(gtid "")
+	if(_ARGS_INTERFACES)
+		get_property(gtid TARGET ${_ARGS_TARGET} PROPERTY INTERFACE_COMPILE_DEFINITIONS)
+	else()
+		get_property(gtid TARGET ${_ARGS_TARGET} PROPERTY COMPILE_DEFINITIONS)
+	endif()
+	foreach(_tmp ${gtid})
+		list(APPEND out "${_tmp}")
+	endforeach()
+
+	set(${_ARGS_OUTPUT} "${out}" PARENT_SCOPE)
 endfunction()
 
 function(generate_compile_commands_json)
@@ -90,170 +130,357 @@ function(generate_compile_commands_json)
 		"REGEX"
 		"TARGETS"
 	)
-
-	set(COMPILER_TAG "")
-	if((CMAKE_C_COMPILER_ID STREQUAL "MSVC") AND (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"))
-		set(COMPILER_TAG "MSVC")
-		set(COMPILER_INCLUDE_PREFIX "/I")
-		set(COMPILER_DEFINE_PREFIX "/D")
-	elseif((CMAKE_C_COMPILER_ID STREQUAL "GNU") AND (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"))
-		set(COMPILER_TAG "GNU")
-		set(COMPILER_INCLUDE_PREFIX "-I")
-		set(COMPILER_DEFINE_PREFIX "-D")
-	elseif((CMAKE_C_COMPILER_ID STREQUAL "Clang") AND (CMAKE_CXX_COMPILER_ID STREQUAL "Clang"))
-		set(COMPILER_TAG "CLANG") # Compatible with GNU
-		set(COMPILER_INCLUDE_PREFIX "-I")
-		set(COMPILER_DEFINE_PREFIX "-D")
-	elseif((CMAKE_C_COMPILER_ID STREQUAL "AppleClang") AND (CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))
-		set(COMPILER_TAG "CLANG") # Compatible with Clang
-		set(COMPILER_INCLUDE_PREFIX "-I")
-		set(COMPILER_DEFINE_PREFIX "-D")
-	else()
-		message("Clang for CMake: C ID '${CMAKE_C_COMPILER_ID}'")
-		message("Clang for CMake: C Version '${CMAKE_C_COMPILER_VERSION}'")
-		message("Clang for CMake: C++ ID '${CMAKE_CXX_COMPILER_ID}'")
-		message("Clang for CMake: C++ Version '${CMAKE_CXX_COMPILER_VERSION}'")
-		message(FATAL_ERROR "Clang for CMake: Current Compiler is not yet supported, please open an issue for it.")
-	endif()
-
-	# Default Filter
 	if(NOT _ARGS_REGEX)
 		set(_ARGS_REGEX "\.(h|hpp|c|cpp)$")
 	endif()
 
-	foreach(_target ${_ARGS_TARGETS})
-		set(COMPILE_COMMAND_JSON "")
-
-		# Source Directory
-		get_target_property(target_source_dir_rel ${_target} SOURCE_DIR)
-		get_filename_component(target_source_dir ${target_source_dir_rel} ABSOLUTE)
-		unset(target_source_dir_rel)
-
-		# Binary Directory
-		get_target_property(target_binary_dir_rel ${_target} BINARY_DIR)
-		get_filename_component(target_binary_dir ${target_binary_dir_rel} ABSOLUTE)
-		unset(target_binary_dir_rel)
-
-		# Sources
-		get_target_property(_els ${_target} SOURCES)
-		set(target_sources "")
-		foreach(_el ${_els})
-			get_filename_component(_el "${_el}" ABSOLUTE)
-			list(APPEND target_sources "${_el}")
+	# If the generator itself can create the compile_commands.json file, don't create our own.
+	set(cc_generators
+		"Borland Makefiles"
+		"MSYS Makefiles"
+		"MinGW Makefiles"
+		"NMake Makefiles"
+		"NMake Makefiles JOM"
+		"Unix Makefiles"
+		"Watcom WMake"
+		"Ninja"
+		"Ninja Multi-Config"
+	)
+	if(CMAKE_GENERATOR IN_LIST cc_generators)
+		foreach(current_target in ${_ARGS_TARGETS})
+			set_target_properties(TARGET ${current_target}
+				CMAKE_EXPORT_COMPILE_COMMANDS ON
+			)
 		endforeach()
-		list(FILTER target_sources INCLUDE REGEX "${_ARGS_REGEX}")
+		return()
+	endif()
 
-		# Combine Compiler String
-		set(COMPILER_OPTIONS "")
-		## Compiler Options
-		get_target_property(_els ${_target} COMPILE_OPTIONS)
-		foreach(_el ${_els})
-			string_append_escaped(OUTPUT COMPILER_OPTIONS INPUT "${_el} ")
-		endforeach()
-		string(APPEND COMPILER_OPTIONS "${CMAKE_CXX_FLAGS} ${CMAKE_C_FLAGS} ")
-		## C++ Standard
-		get_target_property(_el ${_target} CXX_STANDARD)
-		if(COMPILER_TAG STREQUAL "MSVC")			
-			if(${MSVC_VERSION} GREATER_EQUAL "1930")
-				if((_el EQUAL 98) OR (_el EQUAL 11))
-					# Nothing to do, this is the default.
-				elseif(_el EQUAL 14)
-					string(APPEND COMPILER_OPTIONS "/std:c++14 ")
-				elseif(_el EQUAL 17)
-					string(APPEND COMPILER_OPTIONS "/std:c++17 ")
-				elseif(_el EQUAL 20)
-					string(APPEND COMPILER_OPTIONS "/std:c++20 ")
-				elseif(_el EQUAL 23)
-					string(APPEND COMPILER_OPTIONS "/std:c++latest ")
-				endif()
-			elseif(${MSVC_VERSION} GREATER_EQUAL "1920")
-				if((_el EQUAL 98) OR (_el EQUAL 11))
-					# Nothing to do, this is the default.
-				elseif(_el EQUAL 14)
-					string(APPEND COMPILER_OPTIONS "/std:c++14 ")
-				elseif(_el EQUAL 17)
-					string(APPEND COMPILER_OPTIONS "/std:c++17 ")
-				elseif(_el EQUAL 20)
-					string(APPEND COMPILER_OPTIONS "/std:c++latest ")
-				endif()
-			elseif(${MSVC_VERSION} GREATER_EQUAL "1910")
-				if((_el EQUAL 98) OR (_el EQUAL 11))
-					# Nothing to do, this is the default.
-				elseif(_el EQUAL 14)
-					string(APPEND COMPILER_OPTIONS "/std:c++14 ")
-				elseif(_el EQUAL 17)
-					string(APPEND COMPILER_OPTIONS "/std:c++17 ")
-				elseif(_el EQUAL 20)
-					string(APPEND COMPILER_OPTIONS "/std:c++latest ")
-				endif()
+	# Is this generator able to have multiple configurations?
+	get_property(cc_multiconfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+	if(NOT cc_multiconfig)
+		set(cc_configurations ${CMAKE_BUILD_TYPE})
+	else()
+		set(cc_configurations ${CMAKE_CONFIGURATION_TYPES})
+	endif()
+
+
+	foreach(current_target ${_ARGS_TARGETS})
+		# For each target, generate a compile_commands.json file with all files.
+
+		# Get source and binary directory.
+		get_property(cc_tgt_source_dir TARGET ${current_target} PROPERTY SOURCE_DIR)
+		get_filename_component(cc_tgt_source_dir "${cc_tgt_source_dir}" ABSOLUTE)
+		get_property(cc_tgt_binary_dir TARGET ${current_target} PROPERTY BINARY_DIR)
+		get_filename_component(cc_tgt_binary_dir "${cc_tgt_binary_dir}" ABSOLUTE)
+
+		# C++ Standard
+		get_property(cc_tgt_std_CXX TARGET ${current_target} PROPERTY CXX_STANDARD)
+		if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+			if(cc_tgt_std_CXX EQUAL 23)
+				set(cc_tgt_std_CXX "/std:c++latest")
+			elseif(cc_tgt_std_CXX EQUAL 20)
+				set(cc_tgt_std_CXX "/std:c++20")
+			elseif(cc_tgt_std_CXX EQUAL 17)
+				set(cc_tgt_std_CXX "/std:c++17")
+			elseif(cc_tgt_std_CXX EQUAL 14)
+				set(cc_tgt_std_CXX "/std:c++14")
 			else()
-				message("Clang for CMake: C ID '${CMAKE_C_COMPILER_ID}'")
-				message("Clang for CMake: C Version '${CMAKE_C_COMPILER_VERSION}'")
-				message("Clang for CMake: C++ ID '${CMAKE_CXX_COMPILER_ID}'")
-				message("Clang for CMake: C++ Version '${CMAKE_CXX_COMPILER_VERSION}'")
-				message(FATAL_ERROR "Clang for CMake: Current Compiler is not yet supported, please open an issue for it.")
+				set(cc_tgt_std_CXX "")
 			endif()
-		elseif((COMPILER_TAG STREQUAL "CLANG") OR (COMPILER_TAG STREQUAL "GNU"))
-			if(_el EQUAL 98)
-				string(APPEND COMPILER_OPTIONS "-std=c++98 ")
-			elseif(_el EQUAL 11)
-				string(APPEND COMPILER_OPTIONS "-std=c++11 ")
-			elseif(_el EQUAL 14)
-				string(APPEND COMPILER_OPTIONS "-std=c++14 ")
-			elseif(_el EQUAL 17)
-				string(APPEND COMPILER_OPTIONS "-std=c++17 ")
-			elseif(_el EQUAL 20)
-				string(APPEND COMPILER_OPTIONS "-std=c++20 ")
-			elseif(_el EQUAL 23)
-				string(APPEND COMPILER_OPTIONS "-std=c++23 ")
+		else()
+			if(cc_tgt_std_CXX EQUAL 23)
+				set(cc_tgt_std_CXX "-std=c++23")
+			elseif(cc_tgt_std_CXX EQUAL 20)
+				set(cc_tgt_std_CXX "-std=c++20")
+			elseif(cc_tgt_std_CXX EQUAL 17)
+				set(cc_tgt_std_CXX "-std=c++17")
+			elseif(cc_tgt_std_CXX EQUAL 14)
+				set(cc_tgt_std_CXX "-std=c++14")
+			elseif(cc_tgt_std_CXX EQUAL 11)
+				set(cc_tgt_std_CXX "-std=c++11")
+			elseif(cc_tgt_std_CXX EQUAL 98)
+				set(cc_tgt_std_CXX "-std=c++98")
+			else()
+				set(cc_tgt_std_CXX "")
 			endif()
 		endif()
-		## Definitions
-		get_target_property(_els ${_target} COMPILE_DEFINITIONS)
-		foreach(_el ${_els})
-			string_append_escaped(OUTPUT COMPILER_OPTIONS INPUT "${COMPILER_DEFINE_PREFIX}${_el} ")
-		endforeach()
-		## Includes
-		string_append_target_includes(TARGET ${_target} PREFIX ${COMPILER_INCLUDE_PREFIX} OUTPUT COMPILER_OPTIONS)
 
-		# Create Compilation Database
-		set(target_compile_db  "${target_binary_dir}/compile_commands.json")
-		string(APPEND COMPILE_COMMAND_JSON "[\n")
-		foreach(_el ${target_sources})
-			file(TO_NATIVE_PATH "${_el}" _el)
-			string(REPLACE "\\" "\\\\" _el "${_el}")
-			string(REPLACE "\"" "\\\"" _el "${_el}")
-
-			string(APPEND COMPILE_COMMAND_JSON "\t{\n")
-			string(APPEND COMPILE_COMMAND_JSON "\t\t\"directory\": \"${target_binary_dir}\",\n")
-			string(APPEND COMPILE_COMMAND_JSON "\t\t\"file\": \"${_el}\",\n")
-			if(MSVC)
-				string(APPEND COMPILE_COMMAND_JSON "\t\t\"command\": \"cl ")
+		# C standard
+		get_property(cc_tgt_std_C TARGET ${current_target} PROPERTY C_STANDARD)
+		if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+			if(cc_tgt_std_C EQUAL 17)
+				set(cc_tgt_std_C "/std:c17")
+			elseif(cc_tgt_std_C EQUAL 11)
+				set(cc_tgt_std_C "/std:c11")
 			else()
-				string(APPEND COMPILE_COMMAND_JSON "\t\t\"command\": \"cc ")
+				set(cc_tgt_std_C "")
+			endif()
+		else()
+			if(cc_tgt_std_C EQUAL 23)
+				set(cc_tgt_std_C "-std=c2x")
+			elseif(cc_tgt_std_C EQUAL 17)
+				set(cc_tgt_std_C "-std=c17")
+			elseif(cc_tgt_std_C EQUAL 11)
+				set(cc_tgt_std_C "-std=c11")
+			elseif(cc_tgt_std_C EQUAL 99)
+				set(cc_tgt_std_C "-std=c99")
+			elseif(cc_tgt_std_C EQUAL 90)
+				set(cc_tgt_std_C "-std=c90")
+			else()
+				set(cc_tgt_std_C "")
+			endif()
+		endif()
+
+		# Include Directories
+		get_property(_tmp TARGET ${current_target} PROPERTY INCLUDE_DIRECTORIES)
+		foreach(_tmp2 ${_tmp})
+			cmake_path(ABSOLUTE_PATH _tmp2 BASE_DIRECTORY "${cc_tgt_source_dir}")
+			list(APPEND cc_tgt_includes "${_tmp2}")
+		endforeach()
+		get_target_include_directories(OUTPUT _tmp TARGET ${current_target})
+
+		# Definitions, Options
+		get_target_definitions(OUTPUT cc_tgt_definitions TARGET ${current_target})
+		get_property(cc_tgt_options TARGET ${current_target} PROPERTY COMPILE_OPTIONS)
+
+		# Interface stuff from link dependencies
+		get_property(cc_tgt_depends TARGET ${current_target} PROPERTY LINK_LIBRARIES)
+		foreach(_tmp3 ${cc_tgt_depends})
+			if(TARGET ${_tmp3})
+				# - Interface Include Directories
+				get_property(_tmp TARGET ${_tmp3} PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+				foreach(_tmp2 ${_tmp})
+					cmake_path(ABSOLUTE_PATH _tmp2 BASE_DIRECTORY "${cc_tgt_source_dir}")
+					list(APPEND cc_tgt_includes "${_tmp2}")
+				endforeach()
+				get_property(_tmp TARGET ${_tmp3} PROPERTY INTERFACE_SYSTEM_INCLUDE_DIRECTORIES)
+				foreach(_tmp2 ${_tmp})
+					cmake_path(ABSOLUTE_PATH _tmp2 BASE_DIRECTORY "${cc_tgt_source_dir}")
+					list(APPEND cc_tgt_includes "${_tmp2}")
+				endforeach()
+
+				# - Interface Defines, Options
+				get_property(_tmp TARGET ${current_target} PROPERTY INTERFACE_COMPILE_DEFINITIONS)
+				foreach(_tmp2 ${_tmp})
+					list(APPEND cc_tgt_definitions "${_tmp2}")
+				endforeach()
+				get_property(_tmp TARGET ${current_target} PROPERTY INTERFACE_COMPILE_OPTIONS)
+				foreach(_tmp2 ${_tmp})
+					list(APPEND cc_tgt_options "${_tmp2}")
+				endforeach()
+			endif()
+		endforeach()
+
+		# Figure out source files for this target.
+		set(cc_tgt_sources "")
+		get_target_property(_tmp ${current_target} SOURCES)
+		foreach(_tmp2 ${_tmp})
+			cmake_path(ABSOLUTE_PATH _tmp2 BASE_DIRECTORY "${cc_tgt_source_dir}")
+			list(APPEND cc_tgt_sources "${_tmp2}")
+		endforeach()
+		list(FILTER cc_tgt_sources INCLUDE REGEX "${_ARGS_REGEX}")
+
+		# Generate a unique compile_commands.json.
+		set(cc_json_content "")
+		string(APPEND cc_json_content "[\n")
+
+		# Write entries for each file.
+		foreach(current_source ${cc_tgt_sources})
+			# Find the real location of the source file.
+			get_property(cc_src_location SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY LOCATION)
+			cmake_path(ABSOLUTE_PATH cc_src_location BASE_DIRECTORY "${cc_tgt_source_dir}")
+
+			# Try and figure out the language used.
+			get_property(cc_src_language SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY LANGUAGE)
+			if("${cc_src_language}" STREQUAL "")
+				get_filename_component(_tmp "${current_source}" EXT)
+				if((_tmp STREQUAL ".hpp") OR (_tmp STREQUAL ".cpp"))
+					set(cc_src_language "CXX")
+				else()
+					set(cc_src_language "C")
+				endif()
+			endif()
+			if(CMAKE_${cc_src_language}_COMPILER_ID STREQUAL "MSVC")
+				set(_define_prefix "/D")
+				set(_include_prefix "/I")
+			else()
+				set(_define_prefix "-D")
+				set(_include_prefix "-I")
 			endif()
 
-			string(APPEND COMPILE_COMMAND_JSON "${COMPILER_OPTIONS}")
-
-			if(MSVC)
-				string(APPEND COMPILE_COMMAND_JSON "${_el}")
+			if(cc_src_language STREQUAL "CXX")
+				# C++ Standard
+				get_property(cc_src_std_CXX SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY CXX_STANDARD)
+				if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+					if(cc_src_std_CXX EQUAL 23)
+						set(cc_src_std "/std:c++latest")
+					elseif(cc_src_std_CXX EQUAL 20)
+						set(cc_src_std "/std:c++20")
+					elseif(cc_src_std_CXX EQUAL 17)
+						set(cc_src_std "/std:c++17")
+					elseif(cc_src_std_CXX EQUAL 14)
+						set(cc_src_std "/std:c++14")
+					else()
+						set(cc_src_std "${cc_tgt_std_CXX}")
+					endif()
+				else()
+					if(cc_src_std_CXX EQUAL 23)
+						set(cc_src_std "-std=c++23")
+					elseif(cc_src_std_CXX EQUAL 20)
+						set(cc_src_std "-std=c++20")
+					elseif(cc_src_std_CXX EQUAL 17)
+						set(cc_src_std "-std=c++17")
+					elseif(cc_src_std_CXX EQUAL 14)
+						set(cc_src_std "-std=c++14")
+					elseif(cc_src_std_CXX EQUAL 11)
+						set(cc_src_std "-std=c++11")
+					elseif(cc_src_std_CXX EQUAL 98)
+						set(cc_src_std "-std=c++98")
+					else()
+						set(cc_src_std "${cc_tgt_std_CXX}")
+					endif()
+				endif()
 			else()
-				string(APPEND COMPILE_COMMAND_JSON " -c ${_el}")
+				# C standard
+				get_property(cc_src_std_C SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY C_STANDARD)
+				if(CMAKE_C_COMPILER_ID STREQUAL "MSVC")
+					if(cc_src_std_C EQUAL 17)
+						set(cc_src_std "/std:c17")
+					elseif(cc_src_std_C EQUAL 11)
+						set(cc_src_std "/std:c11")
+					else()
+						set(cc_src_std "${cc_tgt_std_C}")
+					endif()
+				else()
+					if(cc_src_std_C EQUAL 23)
+						set(cc_src_std "-std=c2x")
+					elseif(cc_src_std_C EQUAL 17)
+						set(cc_src_std "-std=c17")
+					elseif(cc_src_std_C EQUAL 11)
+						set(cc_src_std "-std=c11")
+					elseif(cc_src_std_C EQUAL 99)
+						set(cc_src_std "-std=c99")
+					elseif(cc_src_std_C EQUAL 90)
+						set(cc_src_std "-std=c90")
+					else()
+						set(cc_src_std "${cc_tgt_std_C}")
+					endif()
+				endif()
 			endif()
-			string(APPEND COMPILE_COMMAND_JSON "\",\n\t},\n")
-		endforeach()
-		string(APPEND COMPILE_COMMAND_JSON "]")
 
+			# Includes
+			set(cc_src_includex "${cc_tgt_includes}")
+			get_property(_tmp SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY INCLUDE_DIRECTORIES)
+			foreach(_tmp2 ${_tmp})
+				cmake_path(ABSOLUTE_PATH _tmp2 BASE_DIRECTORY "${cc_tgt_source_dir}")
+				list(APPEND cc_src_includex "${_tmp2}")
+			endforeach()
+
+			# Defines
+			set(cc_src_defines "${cc_tgt_defines}")
+			get_property(_tmp SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY COMPILE_DEFINITIONS)
+			foreach(_tmp2 ${_tmp})
+				list(APPEND cc_src_defines "${_tmp2}")
+			endforeach()
+
+			# Compile Options
+			set(cc_src_options "${cc_tgt_options}")
+			get_property(_tmp SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY COMPILE_OPTIONS)
+			foreach(_tmp2 ${_tmp})
+				list(APPEND cc_src_options "${_tmp2}")
+			endforeach()
+
+			#get_property(_ SOURCE ${current_source} TARGET_DIRECTORY ${current_target} PROPERTY _)
+
+			# Generate JSON content.
+			string(APPEND cc_json_content "\t{\n")
+
+			# Working Directory
+			json_escape_string(OUTPUT _tmp INPUT "${cc_tgt_source_dir}")
+			file(TO_CMAKE_PATH "${_tmp}" _tmp)
+			string(APPEND cc_json_content "\t\t\"directory\": \"${_tmp}\",\n")
+
+			# Target File
+			json_escape_string(OUTPUT _tmp INPUT "${cc_src_location}")
+			file(TO_CMAKE_PATH "${_tmp}" _tmp)
+			string(APPEND cc_json_content "\t\t\"file\": \"${_tmp}\",\n")
+
+			if(ON) # Command
+				set(_tmp2 "")
+
+				# cl/cc difference
+				if(CMAKE_${cc_src_language}_COMPILER_ID STREQUAL "MSVC")
+					string(APPEND _tmp2 "cl ")
+				else()
+					string(APPEND _tmp2 "cc ")
+				endif()
+
+				# C/CXX Standard
+				string(APPEND _tmp2 "${cc_src_std} ")
+
+				# Global Flags
+				string(APPEND _tmp2 "${CMAKE_${cc_src_language}_FLAGS} ")
+				foreach(current_config ${cc_configurations})
+					string(TOUPPER "${current_config}" _tmp)
+					string(APPEND _tmp2 "$<$<CONFIG:${current_config}>:${CMAKE_${cc_src_language}_FLAGS_${_tmp}}> ")
+				endforeach()
+
+				# Include Directories
+				foreach(_tmp ${cc_src_includex})
+					file(TO_CMAKE_PATH "${_tmp}" _tmp)
+					json_escape_string(OUTPUT _tmp INPUT "${_tmp}")
+					string(APPEND _tmp2 "\"${_include_prefix}${_tmp}\" ")
+				endforeach()
+
+				# Definitions
+				foreach(_tmp ${cc_src_defines})
+					json_escape_string(OUTPUT _tmp INPUT "${_tmp}")
+					string(APPEND _tmp2 "\"${_define_prefix}${_tmp}\" ")
+				endforeach()
+
+				# Other Options
+				foreach(_tmp ${cc_src_options})
+					json_escape_string(OUTPUT _tmp INPUT "${_tmp}")
+					string(APPEND _tmp2 "\"${_tmp}\" ")
+				endforeach()
+
+				# File to compile
+				json_escape_string(OUTPUT _tmp INPUT "${cc_src_location}")
+				if(CMAKE_${cc_src_language}_COMPILER_ID STREQUAL "MSVC")
+					string(APPEND _tmp2 "\"${_tmp}\"")
+				else()
+					string(APPEND _tmp2 "-c \"${_tmp}\"")
+				endif()
+
+				# Command
+				json_escape_string(OUTPUT _tmp INPUT "${_tmp2}")
+				string(APPEND cc_json_content "\t\t\"command\": \"${_tmp}\"\n")
+			endif()
+
+			string(APPEND cc_json_content "\t},\n")
+		endforeach()
+
+		# Close the array.
+		string(APPEND cc_json_content "]\n")
+
+		# Generate file
 		file(GENERATE
-			OUTPUT "$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>/compile_commands.json" 
-			CONTENT "${COMPILE_COMMAND_JSON}"
-			TARGET ${_target} 
-			FILE_PERMISSIONS 755
+			OUTPUT "$<TARGET_PROPERTY:${current_target},BINARY_DIR>/$<CONFIG>/compile_commands.json"
+			CONTENT "${cc_json_content}"
+			TARGET ${current_target}
+			FILE_PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_READ GROUP_EXECUTE
 		)
 	endforeach()
+
+	unset(_tmp)
+	unset(_tmp2)
+	unset(current_target)
+	unset(current_source)
+	unset(current_config)
 endfunction()
 
 function(clang_format)
+	list(APPEND CMAKE_MESSAGE_INDENT "[clang-format] ")
 	cmake_parse_arguments(
 		PARSE_ARGV 0
 		_ARGS
@@ -280,6 +507,7 @@ function(clang_format)
 	)
 	if(NOT CLANG_FORMAT_BIN)
 		message(WARNING "Clang for CMake: Could not find clang-format at path '${CLANG_FORMAT_BIN}', disabling clang-format...")
+		list(POP_BACK CMAKE_MESSAGE_INDENT)
 		return()
 	endif()
 
@@ -297,11 +525,13 @@ function(clang_format)
 		)
 		if(NOT _VERSION_RESULT EQUAL 0)
 			message(WARNING "Clang for CMake: Could not discover version, disabling clang-format...")
+			list(POP_BACK CMAKE_MESSAGE_INDENT)
 			return()
 		endif()
 		string(REGEX MATCH "([0-9]+\.[0-9]+\.[0-9]+)" _VERSION_MATCH ${_VERSION_OUTPUT})
 		if(NOT ${_VERSION_MATCH} VERSION_GREATER_EQUAL ${_ARGS_VERSION})
 			message(WARNING "Clang for CMake: Old version discovered, disabling clang-format...")
+			list(POP_BACK CMAKE_MESSAGE_INDENT)
 			return()
 		endif()
 	endif()
@@ -312,47 +542,56 @@ function(clang_format)
 	endif()
 
 	# Go through each target
-	foreach(_target ${_ARGS_TARGETS})
-		get_target_property(target_sources_rel ${_target} SOURCES)
+	foreach(current_target ${_ARGS_TARGETS})
+		get_target_property(target_sources_rel ${current_target} SOURCES)
 		set(target_sources "")
-		foreach(_el ${target_sources_rel})
-			get_filename_component(_el "${_el}" ABSOLUTE)
-			file(TO_NATIVE_PATH "${_el}" _el)
-			list(APPEND target_sources "${_el}")
+		foreach(_tmp ${target_sources_rel})
+			get_filename_component(_tmp "${_tmp}" ABSOLUTE)
+			file(TO_CMAKE_PATH "${_tmp}" _tmp)
+			list(APPEND target_sources "${_tmp}")
 		endforeach()
 		list(FILTER target_sources INCLUDE REGEX "${_ARGS_REGEX}")
 		unset(target_sources_rel)
-		
-		get_target_property(target_source_dir_rel ${_target} SOURCE_DIR)
+
+		get_target_property(target_source_dir_rel ${current_target} SOURCE_DIR)
 		get_filename_component(target_source_dir ${target_source_dir_rel} ABSOLUTE)
 		unset(target_source_dir_rel)
 
-		add_custom_target(${_target}_CLANG-FORMAT
+		add_custom_target(${current_target}_clang-format
 			COMMAND "${CLANG_FORMAT_BIN}" -style=file -i ${target_sources}
-			COMMENT "clang-format: Formatting ${_target}..."
+			COMMENT "clang-format: Formatting ${current_target}..."
 			WORKING_DIRECTORY "${target_source_dir}"
 		)
 
+		# IDE Folder
+		get_property(folder TARGET ${current_target} PROPERTY FOLDER)
+		set_target_properties(${current_target} PROPERTIES FOLDER "${folder}")
+
 		if(_ARGS_DEPENDENCY)
-			add_dependencies(${_target} ${_target}_CLANG-FORMAT)
+			add_dependencies(${current_target} ${current_target}_clang-format)
 		endif()
 
 		if(_ARGS_GLOBAL)
-			if(TARGET CLANG-FORMAT)
-				add_dependencies(CLANG-FORMAT ${_target}_CLANG-FORMAT)
+			if(TARGET clang-format)
+				add_dependencies(clang-format ${current_target}_clang-format)
 			else()
-				add_custom_target(CLANG-FORMAT
+				add_custom_target(clang-format
 					DEPENDS
-						${_target}_CLANG-FORMAT
+						${current_target}_clang-format
 					COMMENT
 						"clang-format: Formatting..."
+				)
+				set_target_properties(clang-format PROPERTIES
+					FOLDER Clang
 				)
 			endif()
 		endif()
 	endforeach()
+	list(POP_BACK CMAKE_MESSAGE_INDENT)
 endfunction()
 
 function(clang_tidy)
+list(APPEND CMAKE_MESSAGE_INDENT "[clang-tidy] ")
 	cmake_parse_arguments(
 		PARSE_ARGV 0
 		_ARGS
@@ -379,6 +618,7 @@ function(clang_tidy)
 	)
 	if(NOT CLANG_TIDY_BIN)
 		message(WARNING "Clang for CMake: Could not find clang-tidy at path '${CLANG_TIDY_BIN}', disabling clang-tidy...")
+		list(POP_BACK CMAKE_MESSAGE_INDENT)
 		return()
 	endif()
 
@@ -396,11 +636,13 @@ function(clang_tidy)
 		)
 		if(NOT _VERSION_RESULT EQUAL 0)
 			message(WARNING "Clang for CMake: Could not discover version, disabling clang-tidy...")
+			list(POP_BACK CMAKE_MESSAGE_INDENT)
 			return()
 		endif()
 		string(REGEX MATCH "([0-9]+\.[0-9]+\.[0-9]+)" _VERSION_MATCH ${_VERSION_OUTPUT})
 		if(NOT ${_VERSION_MATCH} VERSION_GREATER_EQUAL ${_ARGS_VERSION})
 			message(WARNING "Clang for CMake: Old version discovered, disabling clang-tidy...")
+			list(POP_BACK CMAKE_MESSAGE_INDENT)
 			return()
 		endif()
 	endif()
@@ -411,61 +653,69 @@ function(clang_tidy)
 	endif()
 
 	# Go through each target
-	foreach(_target ${_ARGS_TARGETS})
+	foreach(current_target ${_ARGS_TARGETS})
 		# Source Directory
-		get_target_property(_els ${_target} SOURCE_DIR)
-		get_filename_component(target_source_dir ${_els} ABSOLUTE)
-		file(TO_NATIVE_PATH "${target_source_dir}" target_source_dir_nat)
-		unset(_els)
+		get_target_property(_tmp2 ${current_target} SOURCE_DIR)
+		get_filename_component(target_source_dir ${_tmp2} ABSOLUTE)
+		file(TO_CMAKE_PATH "${target_source_dir}" target_source_dir_nat)
+		unset(_tmp2)
 
 		# Binary Directory
-		get_target_property(_els ${_target} BINARY_DIR)
-		get_filename_component(target_binary_dir ${_els} ABSOLUTE)
-		file(TO_NATIVE_PATH "${target_binary_dir}" target_binary_dir_nat)
-		unset(_els)
+		get_target_property(_tmp2 ${current_target} BINARY_DIR)
+		get_filename_component(target_binary_dir ${_tmp2} ABSOLUTE)
+		file(TO_CMAKE_PATH "${target_binary_dir}" target_binary_dir_nat)
+		unset(_tmp2)
 
 		# Sources
-		get_target_property(_els ${_target} SOURCES)
+		get_target_property(_tmp2 ${current_target} SOURCES)
 		set(target_sources "")
-		foreach(_el ${_els})
-			get_filename_component(_el ${_el} ABSOLUTE)
-			file(TO_NATIVE_PATH "${_el}" _el)
-			list(APPEND target_sources "${_el}")
+		foreach(_tmp ${_tmp2})
+			get_filename_component(_tmp ${_tmp} ABSOLUTE)
+			file(TO_CMAKE_PATH "${_tmp}" _tmp)
+			list(APPEND target_sources "${_tmp}")
 		endforeach()
 		list(FILTER target_sources INCLUDE REGEX "${_ARGS_REGEX}")
-		unset(_els)
+		unset(_tmp2)
 
-		add_custom_target(${_target}_CLANG-TIDY
-			COMMENT "clang-tiy: Tidying ${_target}..."
+		add_custom_target(${current_target}_clang-tidy
+			COMMENT "clang-tiy: Tidying ${current_target}..."
 			WORKING_DIRECTORY "${target_binary_dir}"
 			VERBATIM
 		)
-		foreach(_el ${target_sources})
+		foreach(_tmp ${target_sources})
 			add_custom_command(
-				TARGET ${_target}_CLANG-TIDY
+				TARGET ${current_target}_clang-tidy
 				POST_BUILD
 				COMMAND "${CLANG_TIDY_BIN}"
-				ARGS --quiet -p="$<TARGET_PROPERTY:${_target},BINARY_DIR>/$<CONFIG>" "${_el}"
+				ARGS --quiet -p="$<TARGET_PROPERTY:${current_target},BINARY_DIR>/$<CONFIG>" "${_tmp}"
 				WORKING_DIRECTORY "${target_binary_dir}"
 				COMMAND_EXPAND_LISTS
 			)
 		endforeach()
 
+		# IDE Folder
+		get_property(folder TARGET ${current_target} PROPERTY FOLDER)
+		set_target_properties(${current_target} PROPERTIES FOLDER "${folder}")
+
 		if(_ARGS_DEPENDENCY)
-			add_dependencies(${_target} ${_target}_CLANG-TIDY)
+			add_dependencies(${current_target} ${current_target}_clang-tidy)
 		endif()
 
 		if(_ARGS_GLOBAL)
-			if(TARGET CLANG-TIDY)
-				add_dependencies(CLANG-TIDY ${_target}_CLANG-FORTIDYMAT)
+			if(TARGET clang-tidy)
+				add_dependencies(clang-tidy ${current_target}_clang-format)
 			else()
-				add_custom_target(CLANG-TIDY
+				add_custom_target(clang-tidy
 					DEPENDS
-						${_target}_CLANG-TIDY
+						${current_target}_clang-tidy
 					COMMENT
 						"clang-tiy: Tidying..."
+				)
+				set_target_properties(clang-tidy PROPERTIES
+					FOLDER Clang
 				)
 			endif()
 		endif()
 	endforeach()
+	list(POP_BACK CMAKE_MESSAGE_INDENT)
 endfunction()
