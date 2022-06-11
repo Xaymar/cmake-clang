@@ -147,7 +147,7 @@ function(generate_compile_commands_json)
 		"Ninja Multi-Config"
 	)
 	if(CMAKE_GENERATOR IN_LIST cc_generators)
-		foreach(current_target in ${_ARGS_TARGETS})
+		foreach(current_target ${_ARGS_TARGETS})
 			set_target_properties(${current_target} PROPERTIES
 				CMAKE_EXPORT_COMPILE_COMMANDS ON
 			)
